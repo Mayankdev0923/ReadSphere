@@ -9,7 +9,7 @@ import { FaHeart, FaRegHeart, FaMagic } from 'react-icons/fa';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
-import coverPlaceholder from '../assets/cover-not-found.jpg'; 
+import coverPlaceholder from '../assets/cover-not-found.png'; 
 
 // --- LIQUID GLASS STYLES (Reusable) ---
 const useLiquidGlass = () => {
@@ -39,19 +39,16 @@ export const BookDetails = () => {
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // States
   const [renting, setRenting] = useState(false);
   const [rentalStatus, setRentalStatus] = useState<string | null>(null);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [newComment, setNewComment] = useState('');
 
-  // Adaptive Colors
   const textColor = useColorModeValue('gray.700', 'gray.300');
   const mutedText = useColorModeValue('gray.500', 'gray.400');
   const headingColor = useColorModeValue('gray.900', 'white');
 
-  // Ambient Orbs based on color mode
   const orb1 = useColorModeValue("blue.200", "blue.900");
   const orb2 = useColorModeValue("purple.200", "purple.900");
   const orb3 = useColorModeValue("pink.200", "pink.900");
@@ -81,7 +78,7 @@ export const BookDetails = () => {
   };
 
   const checkRentalStatus = async () => {
-    const { data } = await supabase.from('transactions').select('status').eq('book_id', id).eq('user_id', user?.id).in('status', ['pending', 'approved', 'active']).maybeSingle(); 
+    const { data } = await supabase.from('transactions').select('status').eq('book_id', id).eq('user_id', user?.id).in('status', ['pending', 'approved', 'active', 'pending_return']).maybeSingle(); 
     if (data) setRentalStatus(data.status);
   };
 
@@ -154,16 +151,26 @@ export const BookDetails = () => {
 
   const imageSource = book.image_url ? book.image_url : coverPlaceholder;
 
+  // UPDATED: Dynamic Button Logic handling "rented" by others.
   let mainButton;
   if (rentalStatus === 'pending') {
     mainButton = <Button flex={1} size="lg" borderRadius="full" colorScheme="red" variant="outline" bg={glass.bg} backdropFilter="blur(10px)" onClick={handleCancelRequest} isLoading={renting} shadow="sm">Cancel Request</Button>;
-  } else if (rentalStatus === 'active' || rentalStatus === 'approved') {
-    mainButton = <Button flex={1} size="lg" borderRadius="full" colorScheme="green" bgGradient="linear(to-r, green.400, teal.500)" border="none" shadow="lg" color="white" isDisabled _disabled={{ opacity: 0.8, cursor: 'not-allowed' }}>Currently Rented</Button>;
+  } else if (rentalStatus === 'active' || rentalStatus === 'approved' || rentalStatus === 'pending_return') {
+    mainButton = <Button flex={1} size="lg" borderRadius="full" colorScheme="green" bgGradient="linear(to-r, green.400, teal.500)" border="none" shadow="lg" color="white" isDisabled _disabled={{ opacity: 0.8, cursor: 'not-allowed' }}>Currently Rented by You</Button>;
+  } else if (book.status === 'rented') {
+    mainButton = (
+      <Tooltip label="This book is currently with another reader.">
+        <Button flex={1} size="lg" borderRadius="full" colorScheme="gray" variant="solid" bg="gray.200" color="gray.600" cursor="not-allowed" isDisabled>
+          Already on Rent
+        </Button>
+      </Tooltip>
+    );
   } else {
     mainButton = <Button flex={1} size="lg" borderRadius="full" colorScheme="blue" bgGradient="linear(to-r, blue.400, purple.500)" border="none" onClick={handleRentRequest} isLoading={renting} isDisabled={book.status !== 'available'} shadow="lg" color="white" _hover={{ transform: 'scale(1.02)' }}>{book.status === 'available' ? 'Request Rental' : 'Unavailable'}</Button>;
   }
 
   return (
+    // FIX: Removed overflow="hidden" here so orbs aren't cut off by the navbar
     <Box position="relative" w="100%" minH="100vh">
       
       {/* Background Glowing Orbs */}
@@ -174,10 +181,7 @@ export const BookDetails = () => {
       <Container maxW="container.xl" py={12} position="relative" zIndex={1}>
         <Grid templateColumns={{ base: '1fr', md: '1fr 2.2fr' }} gap={12}>
           
-          {/* --- LEFT COLUMN --- */}
           <VStack spacing={6} align="stretch">
-            
-            {/* Glass Framed Cover Image */}
             <Box bg={glass.bg} backdropFilter={glass.filter} border={glass.border} shadow={glass.shadow} borderRadius="3xl" p={3}>
               <Box borderRadius="2xl" overflow="hidden" shadow="inner">
                 <AspectRatio ratio={2/3}>
@@ -186,7 +190,6 @@ export const BookDetails = () => {
               </Box>
             </Box>
             
-            {/* Action Buttons */}
             <HStack spacing={3}>
               {mainButton}
               <Tooltip label={isInWishlist ? "Remove from Wishlist" : "Add to Wishlist"}>
@@ -206,7 +209,6 @@ export const BookDetails = () => {
               </Tooltip>
             </HStack>
 
-            {/* AI Emotion Bars in Glass Panel */}
             <Box p={6} borderRadius="3xl" bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} shadow={glass.shadow}>
               <Heading size="xs" mb={5} textTransform="uppercase" letterSpacing="widest" color={mutedText} display="flex" alignItems="center" gap={2}>
                 <Icon as={FaMagic} color="purple.400" /> AI Emotion Analysis
@@ -228,7 +230,6 @@ export const BookDetails = () => {
             </Box>
           </VStack>
 
-          {/* --- RIGHT COLUMN --- */}
           <Box pt={{ base: 2, md: 4 }}>
             <Badge bgGradient="linear(to-r, purple.400, pink.400)" color="white" mb={4} borderRadius="full" px={4} py={1} fontSize="sm" shadow="sm">
               {book.broad_category}
@@ -244,7 +245,6 @@ export const BookDetails = () => {
             
             <Heading size="xl" mb={8} letterSpacing="tight" color={headingColor}>Community Reviews ({reviews.length})</Heading>
             
-            {/* Post Review Glass Container */}
             {user && (
               <Box p={6} borderRadius="3xl" bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} shadow={glass.shadow} mb={10}>
                 <HStack mb={4} align="center">
@@ -269,7 +269,6 @@ export const BookDetails = () => {
               </Box>
             )}
 
-            {/* Individual Reviews */}
             <VStack align="stretch" spacing={5}>
               {reviews.map((review) => (
                 <Box key={review.id} p={6} borderRadius="2xl" bg={glass.bg} backdropFilter={glass.filter} shadow={glass.shadow} border={glass.border} transition="all 0.2s" _hover={{ transform: 'translateY(-2px)' }}>

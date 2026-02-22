@@ -9,23 +9,40 @@ import { useRecommendation } from '../hooks/useRecommendation';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-import coverPlaceholder from '../assets/cover-not-found.jpg'; 
+import coverPlaceholder from '../assets/cover-not-found.png'; 
 
-// --- LIQUID GLASS STYLES (Reusable) ---
-export const useLiquidGlass = () => {
-  const bg = useColorModeValue(
+// --- LIQUID GLASS STYLES (Reusable with Variants) ---
+export const useLiquidGlass = (variant: 'default' | 'rented' = 'default') => {
+  // 1. Default Clear Glass
+  const defaultBg = useColorModeValue(
     "linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 100%)", 
     "linear-gradient(135deg, rgba(40, 40, 40, 0.4) 0%, rgba(10, 10, 10, 0.1) 100%)"
   );
+  
+  // 2. Yellow/Gold Tinted Glass for Rented Books
+  const rentedBg = useColorModeValue(
+    "linear-gradient(135deg, rgba(255, 220, 100, 0.45) 0%, rgba(255, 180, 50, 0.15) 100%)", 
+    "linear-gradient(135deg, rgba(200, 140, 30, 0.3) 0%, rgba(120, 70, 10, 0.1) 100%)"
+  );
+
+  const bg = variant === 'rented' ? rentedBg : defaultBg;
+
+  // Enhance the border slightly for the yellow glass
+  const defaultBorder = useColorModeValue("1px solid rgba(255, 255, 255, 0.4)", "1px solid rgba(255, 255, 255, 0.05)");
+  const rentedBorder = useColorModeValue("1px solid rgba(255, 200, 50, 0.4)", "1px solid rgba(255, 180, 50, 0.15)");
+  
+  const border = variant === 'rented' ? rentedBorder : defaultBorder;
+
   const shadow = useColorModeValue(
     `0 8px 32px 0 rgba(31, 38, 135, 0.05), inset 0 1px 1px rgba(255, 255, 255, 0.8), inset 0 -1px 1px rgba(0, 0, 0, 0.05)`, 
     `0 8px 32px 0 rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 -1px 1px rgba(0, 0, 0, 0.3)`
   );
+  
   const hoverShadow = useColorModeValue(
     `0 16px 48px 0 rgba(31, 38, 135, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.9), inset 0 -1px 1px rgba(0, 0, 0, 0.05)`, 
     `0 16px 48px 0 rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.25), inset 0 -1px 1px rgba(0, 0, 0, 0.3)`
   );
-  const border = useColorModeValue("1px solid rgba(255, 255, 255, 0.4)", "1px solid rgba(255, 255, 255, 0.05)");
+  
   const filter = "blur(20px) saturate(180%)";
 
   return { bg, shadow, hoverShadow, border, filter };
@@ -56,9 +73,13 @@ interface BookCardProps { book: any; label?: string; }
 const BookCard = ({ book, label }: BookCardProps) => {
   const navigate = useNavigate();
   const [isImageLoaded, setIsImageLoaded] = useState(false);
-  const glass = useLiquidGlass();
-  const textColor = useColorModeValue('gray.600', 'gray.400');
-  const headingColor = useColorModeValue('gray.800', 'white');
+  
+  const isRented = book.status === 'rented';
+  // Check if book is rented and apply the yellow tinted glass!
+  const glass = useLiquidGlass(isRented ? 'rented' : 'default');
+  
+  const textColor = useColorModeValue(isRented ? 'yellow.800' : 'gray.600', 'gray.400');
+  const headingColor = useColorModeValue(isRented ? 'yellow.900' : 'gray.800', 'white');
   
   useEffect(() => setIsImageLoaded(false), [book.image_url]);
   const imageSource = book.image_url ? book.image_url : coverPlaceholder;
@@ -87,11 +108,19 @@ const BookCard = ({ book, label }: BookCardProps) => {
       </Skeleton>
       
       <Box px={2} pt={4} pb={2}>
-        {label && (
+        {/* Rented Label inside the yellow glass for extra clarity */}
+        {isRented && (
+          <Text fontSize="xs" fontWeight="bold" color={useColorModeValue('yellow.600', 'yellow.400')} textTransform="uppercase" letterSpacing="wider" mb={1}>
+            On Rent
+          </Text>
+        )}
+
+        {label && !isRented && (
           <Badge 
             bgGradient="linear(to-r, purple.400, pink.400)" color="white" border="none"
             mb={3} borderRadius="full" px={3} py={1} fontSize="2xs" fontWeight="bold"
             boxShadow="0 2px 10px rgba(213, 63, 140, 0.4)"
+            display="block" w="fit-content"
           >
             {label}
           </Badge>
@@ -113,7 +142,7 @@ const BookCard = ({ book, label }: BookCardProps) => {
 export const Home = () => {
   const { user } = useAuth();
   const { searchBooks, getHistoryRecommendations, getWishlistRecommendations, getTrendingBooks } = useRecommendation();
-  const glass = useLiquidGlass();
+  const glass = useLiquidGlass('default'); // Default glass for the hero panel
   const toast = useToast();
   
   const [loading, setLoading] = useState(true);
@@ -125,7 +154,6 @@ export const Home = () => {
   const [wishlistRecs, setWishlistRecs] = useState<any[]>([]);
   const [trending, setTrending] = useState<any[]>([]);
 
-  // Vibrant Orbs for the Hero background
   const orb1 = useColorModeValue("purple.300", "purple.900");
   const orb2 = useColorModeValue("blue.300", "blue.900");
   const orb3 = useColorModeValue("pink.300", "pink.900");
@@ -161,16 +189,12 @@ export const Home = () => {
 
   return (
     <Container maxW="container.xl" py={4} mb={20}>
-      
-      {/* --- HERO SECTION WITH GLOWING ORBS & LIQUID GLASS --- */}
       <Box position="relative" w="100%" borderRadius="3xl" mb={16} mt={4}>
         
-        {/* Glowing Ambient Orbs (Behind the glass) */}
         <Box position="absolute" top="-10%" left="0%" w={{ base: "300px", md: "500px" }} h={{ base: "300px", md: "500px" }} bg={orb1} filter="blur(100px)" opacity={0.6} borderRadius="full" zIndex={0} />
         <Box position="absolute" bottom="-10%" right="10%" w={{ base: "250px", md: "400px" }} h={{ base: "250px", md: "400px" }} bg={orb2} filter="blur(90px)" opacity={0.5} borderRadius="full" zIndex={0} />
         <Box position="absolute" top="20%" right="-5%" w={{ base: "200px", md: "350px" }} h={{ base: "200px", md: "350px" }} bg={orb3} filter="blur(100px)" opacity={0.5} borderRadius="full" zIndex={0} />
 
-        {/* The Glass Panel */}
         <VStack 
           position="relative" zIndex={1}
           bg={glass.bg} backdropFilter={glass.filter} 
@@ -179,12 +203,12 @@ export const Home = () => {
           textAlign="center" spacing={8}
         >
           <Badge 
-  colorScheme="blue" variant="subtle" px={4} py={1.5} borderRadius="full" 
-  backdropFilter="blur(10px)" bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')}
-  display="flex" alignItems="center" gap={2}
->
-  <Icon as={FaMagic} /> AI-Powered Library
-</Badge>
+            colorScheme="blue" variant="subtle" px={4} py={1.5} borderRadius="full" 
+            backdropFilter="blur(10px)" bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')}
+            display="flex" alignItems="center" gap={2}
+          >
+            <Icon as={FaMagic} /> AI-Powered Library
+          </Badge>
 
           <Heading size="3xl" letterSpacing="tight" lineHeight="1.1" maxW="800px">
             Find your next story <br/>
@@ -201,7 +225,7 @@ export const Home = () => {
             w="100%" maxW="650px" gap={3} mt={4} direction={{ base: "column", md: "row" }}
             bg={useColorModeValue('rgba(255,255,255,0.6)', 'rgba(0,0,0,0.3)')} 
             backdropFilter="blur(12px)" border={glass.border} p={2} 
-            borderRadius={{ base: "2xl", md: "full" }} // <-- Fixed: adapts to mobile
+            borderRadius={{ base: "2xl", md: "full" }}
             boxShadow="inset 0 2px 4px rgba(0,0,0,0.05)"
           >
             <Input 
@@ -215,8 +239,8 @@ export const Home = () => {
             />
             <Button 
               colorScheme="blue" size="lg" px={10} h="54px"
-              w={{ base: "100%", md: "auto" }} // <-- Fixed: Full width on mobile
-              borderRadius={{ base: "xl", md: "full" }} // <-- Fixed: Adapts to mobile
+              w={{ base: "100%", md: "auto" }}
+              borderRadius={{ base: "xl", md: "full" }}
               onClick={handleSearch} isLoading={searchLoading}
               bgGradient="linear(to-r, blue.400, purple.500)" border="none"
               _hover={{ transform: 'scale(1.02)', bgGradient: "linear(to-r, blue.500, purple.600)" }}
@@ -228,7 +252,6 @@ export const Home = () => {
         </VStack>
       </Box>
 
-      {/* --- SKELETON LOADING --- */}
       {loading && (
         <Box mb={12}>
           <Heading size="lg" mb={8}><Skeleton width="200px" height="30px" borderRadius="md" startColor="gray.100" endColor="gray.300" /></Heading>
@@ -238,7 +261,6 @@ export const Home = () => {
         </Box>
       )}
 
-      {/* --- CONTENT SECTIONS --- */}
       {!loading && (
         <VStack spacing={20} align="stretch" position="relative" zIndex={2}>
           

@@ -9,7 +9,7 @@ import { FaBookOpen, FaClock, FaHeart, FaUpload, FaHistory, FaExchangeAlt } from
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import coverPlaceholder from '../assets/cover-not-found.jpg'; 
+import coverPlaceholder from '../assets/cover-not-found.png'; 
 
 // --- LIQUID GLASS STYLES ---
 const useLiquidGlass = () => {
