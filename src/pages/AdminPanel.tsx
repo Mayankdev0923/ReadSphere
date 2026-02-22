@@ -2,22 +2,50 @@ import { useEffect, useState } from 'react';
 import { 
   Box, Container, Heading, Tabs, TabList, TabPanels, Tab, TabPanel, 
   Table, Thead, Tbody, Tr, Th, Td, Button, Image, Badge, useToast, Text,
-  useColorModeValue, Tooltip, Icon
+  useColorModeValue, Tooltip, Icon, TableContainer, HStack, VStack,
+  Spinner
 } from '@chakra-ui/react';
 import { WarningTwoIcon } from '@chakra-ui/icons';
+import { FaShieldAlt, FaExchangeAlt } from 'react-icons/fa';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+
+// --- LIQUID GLASS STYLES ---
+const useLiquidGlass = () => {
+  const bg = useColorModeValue(
+    "linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 100%)", 
+    "linear-gradient(135deg, rgba(40, 40, 40, 0.4) 0%, rgba(10, 10, 10, 0.1) 100%)"
+  );
+  const solidBg = useColorModeValue("rgba(255, 255, 255, 0.75)", "rgba(30, 30, 30, 0.65)");
+  const shadow = useColorModeValue(
+    `0 8px 32px 0 rgba(31, 38, 135, 0.05), inset 0 1px 1px rgba(255, 255, 255, 0.8), inset 0 -1px 1px rgba(0, 0, 0, 0.05)`, 
+    `0 8px 32px 0 rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 -1px 1px rgba(0, 0, 0, 0.3)`
+  );
+  const border = useColorModeValue("1px solid rgba(255, 255, 255, 0.5)", "1px solid rgba(255, 255, 255, 0.08)");
+  const filter = "blur(24px) saturate(180%)";
+
+  return { bg, solidBg, shadow, border, filter };
+};
 
 export const AdminPanel = () => {
   const { role, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const bg = useColorModeValue('white', 'gray.800');
+  const glass = useLiquidGlass();
   
+  const textColor = useColorModeValue('gray.700', 'gray.200');
+  const mutedText = useColorModeValue('gray.500', 'gray.400');
+  const tableBorderColor = useColorModeValue('rgba(0,0,0,0.05)', 'rgba(255,255,255,0.05)');
+  const theadBg = useColorModeValue('rgba(255,255,255,0.5)', 'rgba(0,0,0,0.2)');
+
+  const orb1 = useColorModeValue("purple.200", "purple.900");
+  const orb2 = useColorModeValue("teal.200", "teal.900");
+
   const [pendingBooks, setPendingBooks] = useState<any[]>([]);
-  const [existingBooks, setExistingBooks] = useState<any[]>([]); // To check duplicates
+  const [existingBooks, setExistingBooks] = useState<any[]>([]); 
   const [pendingRentals, setPendingRentals] = useState<any[]>([]);
+  const [pendingReturns, setPendingReturns] = useState<any[]>([]); 
   const [activeRentals, setActiveRentals] = useState<any[]>([]); 
   const [returnHistory, setReturnHistory] = useState<any[]>([]); 
 
@@ -33,17 +61,17 @@ export const AdminPanel = () => {
   }, [role, authLoading]);
 
   const fetchAllData = async () => {
-    // 1. Pending Submissions
     const { data: pBooks } = await supabase.from('books').select('*').eq('status', 'pending_approval');
     if (pBooks) setPendingBooks(pBooks);
 
-    // 2. Fetch ALL Active Books (for duplicate checking)
     const { data: eBooks } = await supabase.from('books').select('title, isbn13').neq('status', 'pending_approval');
     if (eBooks) setExistingBooks(eBooks);
 
-    // 3. Rental Data
     const { data: rentals } = await supabase.from('transactions').select('*, book:books(title), user:profiles(full_name, email)').eq('status', 'pending');
     if (rentals) setPendingRentals(rentals);
+
+    const { data: returns } = await supabase.from('transactions').select('*, book:books(id, title), user:profiles(full_name, email)').eq('status', 'pending_return');
+    if (returns) setPendingReturns(returns);
 
     const { data: active } = await supabase.from('transactions').select('*, book:books(title), user:profiles(full_name, email)').in('status', ['approved', 'active']).order('due_date', { ascending: true });
     if (active) setActiveRentals(active);
@@ -52,40 +80,38 @@ export const AdminPanel = () => {
     if (history) setReturnHistory(history);
   };
 
-  // --- DUPLICATE CHECK LOGIC ---
   const getDuplicateStatus = (book: any) => {
-    // Check ISBN Match (Strongest Signal)
     if (book.isbn13) {
       const isbnMatch = existingBooks.find(b => b.isbn13 === book.isbn13);
       if (isbnMatch) return { isDup: true, reason: 'ISBN Match' };
     }
-    
-    // Check Title Match (Fuzzy)
     const titleMatch = existingBooks.find(b => b.title.toLowerCase() === book.title.toLowerCase());
     if (titleMatch) return { isDup: true, reason: 'Title Match' };
-
     return { isDup: false, reason: '' };
   };
 
-  const handleBookAction = async (id: number, action: 'approve' | 'reject') => {
+  const handleVerifyReturn = async (transactionId: number, bookId: number) => {
     try {
-      if (action === 'approve') {
-        const { error } = await supabase.from('books').update({ status: 'available' }).eq('id', id);
-        if (error) throw error;
-        toast({ title: 'Book Published', status: 'success' });
-      } else {
-        const { error } = await supabase.from('books').delete().eq('id', id);
-        if (error) throw error;
-        toast({ title: 'Book Rejected', status: 'info' });
-      }
+      const { error: tError } = await supabase
+        .from('transactions')
+        .update({ status: 'returned', returned_at: new Date().toISOString() })
+        .eq('id', transactionId);
+
+      const { error: bError } = await supabase
+        .from('books')
+        .update({ status: 'available' })
+        .eq('id', bookId);
+
+      if (tError || bError) throw new Error("Verification failed");
+
+      toast({ title: 'Return Verified', status: 'success' });
       fetchAllData();
     } catch (error: any) {
-      toast({ title: 'Action Failed', description: error.message, status: 'error' });
+      toast({ title: 'Error', description: error.message, status: 'error' });
     }
   };
 
   const handleRentalAction = async (id: number, action: 'approve' | 'reject') => {
-    // ... (Keep existing rental logic identical to previous code) ...
     try {
       const status = action === 'approve' ? 'approved' : 'rejected';
       const updates: any = { status, approval_date: new Date().toISOString() };
@@ -112,8 +138,22 @@ export const AdminPanel = () => {
     }
   };
 
+  const handleBookAction = async (id: number, action: 'approve' | 'reject') => {
+    try {
+      if (action === 'approve') {
+        await supabase.from('books').update({ status: 'available' }).eq('id', id);
+        toast({ title: 'Book Published', status: 'success' });
+      } else {
+        await supabase.from('books').delete().eq('id', id);
+        toast({ title: 'Book Rejected', status: 'info' });
+      }
+      fetchAllData();
+    } catch (error: any) {
+      toast({ title: 'Action Failed', description: error.message, status: 'error' });
+    }
+  };
+
   const handleForceReturn = async (id: number, bookId: number) => {
-    // ... (Keep existing logic) ...
     if (!window.confirm("Force return this book?")) return;
     await supabase.from('transactions').update({ status: 'returned', returned_at: new Date().toISOString() }).eq('id', id);
     await supabase.from('books').update({ status: 'available' }).eq('id', bookId);
@@ -121,125 +161,187 @@ export const AdminPanel = () => {
     fetchAllData();
   };
 
-  if (authLoading) return <Box p={10}>Checking permissions...</Box>;
+  if (authLoading) return <Container maxW="container.xl" py={12} centerContent><Spinner size="xl" /></Container>;
 
   return (
-    <Container maxW="container.xl" py={10}>
-      <Heading mb={6}>Admin Console</Heading>
-      <Tabs variant="enclosed" colorScheme="blue" isLazy>
-        <TabList>
-          <Tab>Requests ({pendingRentals.length})</Tab>
-          <Tab>Submissions ({pendingBooks.length})</Tab> {/* Moved Submissions earlier for visibility */}
-          <Tab>Active Rentals</Tab>
-          <Tab>History</Tab>
-        </TabList>
-        <TabPanels>
+    <Box position="relative" w="100%" minH="100vh">
+      <Box position="absolute" top="-10%" left="-5%" w={{ base: "300px", md: "500px" }} h={{ base: "300px", md: "500px" }} bg={orb1} filter="blur(120px)" opacity={0.5} borderRadius="full" zIndex={0} pointerEvents="none" />
+      <Box position="absolute" bottom="-10%" right="-5%" w={{ base: "250px", md: "400px" }} h={{ base: "250px", md: "400px" }} bg={orb2} filter="blur(100px)" opacity={0.4} borderRadius="full" zIndex={0} pointerEvents="none" />
+
+      <Container maxW="container.xl" py={12} position="relative" zIndex={1}>
+        <VStack align="start" mb={10} spacing={2}>
+          <Badge colorScheme="purple" variant="subtle" px={3} py={1} borderRadius="full">
+            <Icon as={FaShieldAlt} mr={2} /> Admin Console
+          </Badge>
+          <Heading size="2xl" bgGradient="linear(to-r, blue.400, purple.500)" bgClip="text">
+            Management Portal
+          </Heading>
+        </VStack>
+        
+        <Tabs variant="unstyled" isLazy>
+          <Box 
+            bg={glass.bg} backdropFilter={glass.filter} border={glass.border} 
+            borderRadius="full" p={2} mb={8} shadow={glass.shadow} 
+            display="inline-block" maxW="100%" overflowX="auto"
+            sx={{ scrollbarWidth: 'none', '::-webkit-scrollbar': { display: 'none' } }}
+          >
+            <TabList gap={2}>
+              {[
+                { label: 'Requests', count: pendingRentals.length, color: 'blue' },
+                { label: 'Returns', count: pendingReturns.length, color: 'orange' },
+                { label: 'Submissions', count: pendingBooks.length, color: 'purple' },
+                { label: 'Active', count: null, color: 'green' },
+                { label: 'History', count: null, color: 'gray' }
+              ].map((tab, i) => (
+                <Tab 
+                  key={i} fontWeight="semibold" whiteSpace="nowrap" borderRadius="full" px={6} py={2}
+                  color={textColor} transition="all 0.3s"
+                  _selected={{ bg: useColorModeValue('white', 'whiteAlpha.200'), shadow: 'sm', color: useColorModeValue(`${tab.color}.600`, `${tab.color}.200`) }}
+                >
+                  {tab.label} {tab.count !== null && <Badge ml={2} colorScheme={tab.color} borderRadius="full">{tab.count}</Badge>}
+                </Tab>
+              ))}
+            </TabList>
+          </Box>
           
-          {/* 1. Requests */}
-          <TabPanel>
-             {/* ... (Same Rental Request Table as before) ... */}
-             <Table variant="simple" bg={bg} borderRadius="md" shadow="sm">
-              <Thead><Tr><Th>User</Th><Th>Book</Th><Th>Actions</Th></Tr></Thead>
-              <Tbody>
-                {pendingRentals.map((r) => (
-                  <Tr key={r.id}>
-                    <Td>{r.user?.full_name}</Td>
-                    <Td>{r.book?.title}</Td>
-                    <Td>
-                      <Button size="sm" colorScheme="green" mr={2} onClick={() => handleRentalAction(r.id, 'approve')}>Approve</Button>
-                      <Button size="sm" colorScheme="red" onClick={() => handleRentalAction(r.id, 'reject')}>Reject</Button>
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-             {pendingRentals.length === 0 && <Text p={4} color="gray.500">No pending requests.</Text>}
-          </TabPanel>
+          <TabPanels>
+            {/* 1. RENTAL REQUESTS */}
+            <TabPanel px={0} py={0}>
+               <Box bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} borderRadius="3xl" shadow={glass.shadow} overflow="hidden">
+                 <TableContainer>
+                   <Table variant="simple" minW="600px" sx={{ 'th, td': { borderColor: tableBorderColor } }}>
+                    <Thead bg={theadBg}><Tr><Th py={4}>User</Th><Th py={4}>Book</Th><Th py={4}>Actions</Th></Tr></Thead>
+                    <Tbody>
+                      {pendingRentals.map((r) => (
+                        <Tr key={r.id}>
+                          <Td fontWeight="medium">{r.user?.full_name}</Td>
+                          <Td color={mutedText}>{r.book?.title}</Td>
+                          <Td><HStack><Button size="sm" borderRadius="full" colorScheme="green" onClick={() => handleRentalAction(r.id, 'approve')}>Approve</Button><Button size="sm" variant="ghost" colorScheme="red" onClick={() => handleRentalAction(r.id, 'reject')}>Reject</Button></HStack></Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+                {pendingRentals.length === 0 && <Text p={10} textAlign="center">No pending requests.</Text>}
+               </Box>
+            </TabPanel>
 
-          {/* 2. SUBMISSIONS (With Duplicate Check) */}
-          <TabPanel>
-            <Table variant="simple" bg={bg} borderRadius="md" shadow="sm">
-              <Thead>
-                <Tr>
-                  <Th>Cover</Th>
-                  <Th>Details</Th>
-                  <Th>Dup. Check</Th>
-                  <Th>Actions</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {pendingBooks.map((b) => {
-                  const { isDup, reason } = getDuplicateStatus(b);
-                  return (
-                    <Tr key={b.id}>
-                      <Td>
-                        <Image src={b.image_url} h="60px" w="40px" objectFit="cover" borderRadius="sm" fallbackSrc="https://via.placeholder.com/40x60" />
-                      </Td>
-                      <Td>
-                        <Text fontWeight="bold">{b.title}</Text>
-                        <Text fontSize="xs" color="gray.500">ISBN: {b.isbn13 || 'N/A'}</Text>
-                        <Badge fontSize="0.7em" mt={1}>{b.broad_category}</Badge>
-                      </Td>
-                      <Td>
-                        {isDup ? (
-                          <Tooltip label={`Book already exists: ${reason}`}>
-                            <Badge colorScheme="red" display="flex" alignItems="center" w="fit-content" px={2} py={1}>
-                              <Icon as={WarningTwoIcon} mr={1} /> Duplicate?
-                            </Badge>
-                          </Tooltip>
-                        ) : (
-                          <Badge colorScheme="green" variant="outline">Unique</Badge>
-                        )}
-                      </Td>
-                      <Td>
-                        <Button size="sm" colorScheme="green" mr={2} onClick={() => handleBookAction(b.id, 'approve')}>Publish</Button>
-                        <Button size="sm" colorScheme="red" onClick={() => handleBookAction(b.id, 'reject')}>Reject</Button>
-                      </Td>
-                    </Tr>
-                  );
-                })}
-              </Tbody>
-            </Table>
-            {pendingBooks.length === 0 && <Text p={4} color="gray.500">No pending submissions.</Text>}
-          </TabPanel>
+            {/* 2. RETURN VERIFICATIONS */}
+            <TabPanel px={0} py={0}>
+               <Box bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} borderRadius="3xl" shadow={glass.shadow} overflow="hidden">
+                 <TableContainer>
+                   <Table variant="simple" minW="600px" sx={{ 'th, td': { borderColor: tableBorderColor } }}>
+                    <Thead bg={theadBg}><Tr><Th py={4}>User</Th><Th py={4}>Book</Th><Th py={4}>Actions</Th></Tr></Thead>
+                    <Tbody>
+                      {pendingReturns.map((r) => (
+                        <Tr key={r.id}>
+                          <Td fontWeight="medium">{r.user?.full_name}</Td>
+                          <Td color={mutedText}>{r.book?.title}</Td>
+                          <Td><Button size="sm" borderRadius="full" colorScheme="orange" leftIcon={<Icon as={FaExchangeAlt} />} onClick={() => handleVerifyReturn(r.id, r.book.id)}>Confirm Received</Button></Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+                {pendingReturns.length === 0 && <Text p={10} textAlign="center">No returns to verify.</Text>}
+               </Box>
+            </TabPanel>
 
-          {/* 3. Active Rentals */}
-          <TabPanel>
-             {/* ... (Same Active Rentals Table) ... */}
-             <Table variant="simple" bg={bg} borderRadius="md" shadow="sm">
-              <Thead><Tr><Th>User</Th><Th>Book</Th><Th>Due</Th><Th>Actions</Th></Tr></Thead>
-              <Tbody>
-                {activeRentals.map((r) => (
-                  <Tr key={r.id}>
-                    <Td>{r.user?.full_name}</Td>
-                    <Td>{r.book?.title}</Td>
-                    <Td>{new Date(r.due_date).toLocaleDateString()}</Td>
-                    <Td><Button size="sm" colorScheme="blue" variant="outline" onClick={() => handleForceReturn(r.id, r.book_id)}>Force Return</Button></Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </TabPanel>
+            {/* 3. SUBMISSIONS */}
+            <TabPanel px={0} py={0}>
+              <Box bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} borderRadius="3xl" shadow={glass.shadow} overflow="hidden">
+                <TableContainer>
+                  <Table variant="simple" minW="800px" sx={{ 'th, td': { borderColor: tableBorderColor } }}>
+                    <Thead bg={theadBg}>
+                      <Tr><Th py={5}>Cover</Th><Th py={5}>Details</Th><Th py={5}>Dup. Check</Th><Th py={5}>Actions</Th></Tr>
+                    </Thead>
+                    <Tbody>
+                      {pendingBooks.map((b) => {
+                        const { isDup, reason } = getDuplicateStatus(b);
+                        return (
+                          <Tr key={b.id} transition="all 0.2s" _hover={{ bg: useColorModeValue('whiteAlpha.600', 'whiteAlpha.100') }}>
+                            <Td>
+                              <Image src={b.image_url} h="60px" w="40px" objectFit="cover" borderRadius="md" fallbackSrc="https://via.placeholder.com/40x60" shadow="sm" />
+                            </Td>
+                            <Td>
+                              <VStack align="start" spacing={0}>
+                                <Text fontWeight="bold" color={textColor}>{b.title}</Text>
+                                <Text fontSize="xs" color={mutedText}>ISBN: {b.isbn13 || 'N/A'}</Text>
+                                <Badge fontSize="0.7em" mt={1} borderRadius="full" px={2} colorScheme="purple">{b.broad_category}</Badge>
+                              </VStack>
+                            </Td>
+                            <Td>
+                              {isDup ? (
+                                <Tooltip label={`Book already exists: ${reason}`}>
+                                  <Badge colorScheme="red" display="flex" alignItems="center" w="fit-content" px={2} py={1} borderRadius="md" bg="red.100" color="red.700">
+                                    <Icon as={WarningTwoIcon} mr={1} /> Duplicate?
+                                  </Badge>
+                                </Tooltip>
+                              ) : (
+                                <Badge colorScheme="green" variant="subtle" borderRadius="md" px={2} py={1} bg="green.100" color="green.700">Unique</Badge>
+                              )}
+                            </Td>
+                            <Td>
+                              <HStack>
+                                <Button size="sm" borderRadius="full" colorScheme="green" onClick={() => handleBookAction(b.id, 'approve')}>Publish</Button>
+                                <Button size="sm" borderRadius="full" colorScheme="red" variant="ghost" onClick={() => handleBookAction(b.id, 'reject')}>Reject</Button>
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+                {pendingBooks.length === 0 && <Text p={10} textAlign="center" color={mutedText} fontWeight="medium">No pending submissions.</Text>}
+              </Box>
+            </TabPanel>
 
-          {/* 4. History */}
-          <TabPanel>
-            {/* ... (Same History Table) ... */}
-            <Table variant="simple" bg={bg} borderRadius="md" shadow="sm">
-              <Thead><Tr><Th>User</Th><Th>Book</Th><Th>Returned</Th></Tr></Thead>
-              <Tbody>
-                {returnHistory.map((r) => (
-                  <Tr key={r.id}>
-                    <Td>{r.user?.full_name}</Td>
-                    <Td>{r.book?.title}</Td>
-                    <Td>{r.returned_at ? new Date(r.returned_at).toLocaleDateString() : '-'}</Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </TabPanel>
+            {/* 4. ACTIVE RENTALS */}
+            <TabPanel px={0} py={0}>
+               <Box bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} borderRadius="3xl" shadow={glass.shadow} overflow="hidden">
+                 <TableContainer>
+                   <Table variant="simple" minW="600px" sx={{ 'th, td': { borderColor: tableBorderColor } }}>
+                    <Thead bg={theadBg}><Tr><Th py={4}>User</Th><Th py={4}>Book</Th><Th py={4}>Due</Th><Th py={4}>Actions</Th></Tr></Thead>
+                    <Tbody>
+                      {activeRentals.map((r) => (
+                        <Tr key={r.id}>
+                          <Td fontWeight="medium">{r.user?.full_name}</Td>
+                          <Td color={mutedText}>{r.book?.title}</Td>
+                          <Td>{new Date(r.due_date).toLocaleDateString()}</Td>
+                          <Td><Button size="sm" borderRadius="full" colorScheme="blue" variant="outline" onClick={() => handleForceReturn(r.id, r.book_id)}>Force Return</Button></Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+                {activeRentals.length === 0 && <Text p={10} textAlign="center" color={mutedText} fontWeight="medium">No active rentals.</Text>}
+               </Box>
+            </TabPanel>
 
-        </TabPanels>
-      </Tabs>
-    </Container>
+            {/* 5. HISTORY */}
+            <TabPanel px={0} py={0}>
+              <Box bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} borderRadius="3xl" shadow={glass.shadow} overflow="hidden">
+                <TableContainer>
+                  <Table variant="simple" minW="500px" sx={{ 'th, td': { borderColor: tableBorderColor } }}>
+                    <Thead bg={theadBg}><Tr><Th py={4}>User</Th><Th py={4}>Book</Th><Th py={4}>Returned</Th></Tr></Thead>
+                    <Tbody>
+                      {returnHistory.map((r) => (
+                        <Tr key={r.id}>
+                          <Td fontWeight="medium">{r.user?.full_name}</Td>
+                          <Td color={mutedText}>{r.book?.title}</Td>
+                          <Td>{r.returned_at ? new Date(r.returned_at).toLocaleDateString() : '-'}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+                {returnHistory.length === 0 && <Text p={10} textAlign="center" color={mutedText} fontWeight="medium">No history available.</Text>}
+              </Box>
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+      </Container>
+    </Box>
   );
 };
