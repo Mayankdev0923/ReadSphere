@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { 
   Box, Container, Heading, Grid, VStack, HStack, Text, Badge, Button, 
   Image, useToast, SimpleGrid, useColorModeValue, AspectRatio, 
-  Spinner, Icon, Progress, Flex
+  Spinner, Tooltip, Icon, Progress, Flex
 } from '@chakra-ui/react';
 import { DeleteIcon } from '@chakra-ui/icons';
 import { FaBookOpen, FaClock, FaHeart, FaUpload, FaHistory, FaExchangeAlt } from 'react-icons/fa';
@@ -70,7 +70,6 @@ export const Dashboard = () => {
     }
   };
 
-  // UPDATED: Requests a return for admin verification
   const handleReturnRequest = async (transactionId: number) => {
     const { error } = await supabase
       .from('transactions')
@@ -118,9 +117,9 @@ export const Dashboard = () => {
 
   return (
     <Box position="relative" w="100%" minH="100vh">
-      {/* Background Glowing Orbs */}
-      <Box position="absolute" top="5%" left="-10%" w="500px" h="500px" bg={orb1} filter="blur(120px)" opacity={0.4} borderRadius="full" zIndex={0} pointerEvents="none" />
-      <Box position="absolute" top="40%" right="-5%" w="400px" h="400px" bg={orb2} filter="blur(100px)" opacity={0.3} borderRadius="full" zIndex={0} pointerEvents="none" />
+      {/* Background Glowing Orbs - FIXED POSITION */}
+      <Box position="fixed" top="5%" left="-10%" w="500px" h="500px" bg={orb1} filter="blur(120px)" opacity={0.4} borderRadius="full" zIndex={0} pointerEvents="none" />
+      <Box position="fixed" top="40%" right="-5%" w="400px" h="400px" bg={orb2} filter="blur(100px)" opacity={0.3} borderRadius="full" zIndex={0} pointerEvents="none" />
 
       <Container maxW="container.xl" py={12} position="relative" zIndex={1}>
         {/* --- HEADER --- */}
@@ -154,7 +153,7 @@ export const Dashboard = () => {
           ))}
         </SimpleGrid>
 
-        <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap={10}>
+        <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap={10} mb={12}>
           {/* --- LEFT COLUMN --- */}
           <VStack align="stretch" spacing={10}>
             {/* CURRENTLY READING */}
@@ -233,6 +232,7 @@ export const Dashboard = () => {
 
           {/* --- RIGHT COLUMN --- */}
           <VStack align="stretch" spacing={10}>
+            
             {/* PENDING REQUESTS */}
             <Box>
               <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}><Icon as={FaClock} color="yellow.500"/> Pending Requests</Heading>
@@ -276,24 +276,34 @@ export const Dashboard = () => {
               )}
             </Box>
 
-            {/* WISHLIST */}
-            <Box>
-              <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}><Icon as={FaHeart} color="pink.500"/> Wishlist</Heading>
-              {wishlist.length === 0 ? (
-                <Text color={textColor} fontSize="sm" p={4} bg={glass.bg} border={glass.border} borderRadius="2xl">Your wishlist is empty.</Text>
-              ) : (
-                <SimpleGrid columns={2} spacing={4}>
-                  {wishlist.map((w) => (
-                    <Box key={w.id} as={Link} to={`/book/${w.book?.id}`} p={2} bg={glass.solidBg} border={glass.border} borderRadius="xl" _hover={{ shadow: 'md', transform: 'translateY(-2px)' }} transition="all 0.2s">
-                      <Box borderRadius="lg" overflow="hidden" mb={2}><AspectRatio ratio={2/3}><Image src={w.book?.image_url || coverPlaceholder} /></AspectRatio></Box>
-                      <Text fontSize="xs" fontWeight="bold" noOfLines={1} textAlign="center">{w.book?.title}</Text>
-                    </Box>
-                  ))}
-                </SimpleGrid>
-              )}
-            </Box>
           </VStack>
         </Grid>
+
+        {/* --- BOTTOM ROW: WISHLIST --- */}
+        <Box w="100%" mt={2}>
+          <Heading size="lg" mb={6} letterSpacing="tight" display="flex" alignItems="center" gap={3}>
+            <Icon as={FaHeart} color="pink.500"/> Your Wishlist
+          </Heading>
+          {wishlist.length === 0 ? (
+            <Text color={textColor} fontSize="sm" p={4} bg={glass.bg} border={glass.border} borderRadius="2xl" maxW="400px">
+              Your wishlist is empty.
+            </Text>
+          ) : (
+            <SimpleGrid columns={[2, 3, 4, 5]} spacing={6}>
+              {wishlist.map((w) => (
+                <Box key={w.id} as={Link} to={`/book/${w.book?.id}`} p={3} bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} borderRadius="2xl" shadow="sm" _hover={{ shadow: glass.hoverShadow, transform: 'translateY(-4px)' }} transition="all 0.3s">
+                  <Box borderRadius="xl" overflow="hidden" mb={3}>
+                    <AspectRatio ratio={2/3}>
+                      <Image src={w.book?.image_url || coverPlaceholder} objectFit="cover" />
+                    </AspectRatio>
+                  </Box>
+                  <Text fontSize="sm" fontWeight="bold" noOfLines={1} textAlign="center">{w.book?.title}</Text>
+                </Box>
+              ))}
+            </SimpleGrid>
+          )}
+        </Box>
+
       </Container>
     </Box>
   );
