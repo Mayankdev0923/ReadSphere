@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { 
   Box, Container, Heading, Grid, VStack, HStack, Text, Badge, Button, 
   Image, useToast, SimpleGrid, useColorModeValue, AspectRatio, 
-  Spinner, Tooltip, Icon, Progress, Flex
+  Spinner, Icon, Progress, Flex
 } from '@chakra-ui/react';
 import { DeleteIcon } from '@chakra-ui/icons';
 import { FaBookOpen, FaClock, FaHeart, FaUpload, FaHistory, FaExchangeAlt } from 'react-icons/fa';
