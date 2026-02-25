@@ -1,33 +1,34 @@
 import { useEffect, useState } from 'react';
 import { 
   Box, Container, Heading, Input, SimpleGrid, Image, Text, 
-  VStack, Badge, Button, Flex, useToast,
+  VStack, HStack, Badge, Button, Flex, useToast,
   useColorModeValue, Icon, Skeleton, AspectRatio
 } from '@chakra-ui/react';
-import { FaMagic } from 'react-icons/fa';
+import { FaMagic, FaArrowRight } from 'react-icons/fa';
 import { useRecommendation } from '../hooks/useRecommendation';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 import coverPlaceholder from '../assets/cover-not-found.png'; 
 
 // --- LIQUID GLASS STYLES (Reusable with Variants) ---
 export const useLiquidGlass = (variant: 'default' | 'rented' = 'default') => {
-  // 1. Default Clear Glass
   const defaultBg = useColorModeValue(
     "linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 100%)", 
     "linear-gradient(135deg, rgba(40, 40, 40, 0.4) 0%, rgba(10, 10, 10, 0.1) 100%)"
   );
+  const defaultSolidBg = useColorModeValue("rgba(255, 255, 255, 0.7)", "rgba(30, 30, 30, 0.6)");
   
-  // 2. Yellow/Gold Tinted Glass for Rented Books
   const rentedBg = useColorModeValue(
     "linear-gradient(135deg, rgba(255, 220, 100, 0.45) 0%, rgba(255, 180, 50, 0.15) 100%)", 
     "linear-gradient(135deg, rgba(200, 140, 30, 0.3) 0%, rgba(120, 70, 10, 0.1) 100%)"
   );
+  const rentedSolidBg = useColorModeValue("rgba(255, 230, 150, 0.7)", "rgba(80, 60, 20, 0.6)");
 
   const bg = variant === 'rented' ? rentedBg : defaultBg;
+  const solidBg = variant === 'rented' ? rentedSolidBg : defaultSolidBg;
 
-  // Enhance the border slightly for the yellow glass
   const defaultBorder = useColorModeValue("1px solid rgba(255, 255, 255, 0.4)", "1px solid rgba(255, 255, 255, 0.05)");
   const rentedBorder = useColorModeValue("1px solid rgba(255, 200, 50, 0.4)", "1px solid rgba(255, 180, 50, 0.15)");
   
@@ -45,21 +46,16 @@ export const useLiquidGlass = (variant: 'default' | 'rented' = 'default') => {
   
   const filter = "blur(20px) saturate(180%)";
 
-  return { bg, shadow, hoverShadow, border, filter };
+  return { bg, solidBg, shadow, hoverShadow, border, filter };
 };
 
 // --- Helper: Skeleton Card ---
 const BookCardSkeleton = () => {
   const glass = useLiquidGlass();
-
   return (
-    <Box 
-      bg={glass.bg} backdropFilter={glass.filter} 
-      boxShadow={glass.shadow} border={glass.border}
-      borderRadius="3xl" p={3}
-    >
-      <Skeleton height="240px" width="100%" borderRadius="2xl" />
-      <Box p={3} mt={2}>
+    <Box bg={glass.bg} backdropFilter={glass.filter} boxShadow={glass.shadow} border={glass.border} borderRadius="3xl" p={{ base: 2, md: 3 }}>
+      <Skeleton height={{ base: "180px", md: "240px" }} width="100%" borderRadius="2xl" />
+      <Box p={{ base: 2, md: 3 }} mt={2}>
         <Skeleton height="20px" width="70%" mb={3} />
         <Skeleton height="16px" width="50%" />
       </Box>
@@ -70,12 +66,11 @@ const BookCardSkeleton = () => {
 // --- Component: BookCard ---
 interface BookCardProps { book: any; label?: string; }
 
-const BookCard = ({ book, label }: BookCardProps) => {
+export const BookCard = ({ book, label }: BookCardProps) => {
   const navigate = useNavigate();
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   
   const isRented = book.status === 'rented';
-  // Check if book is rented and apply the yellow tinted glass!
   const glass = useLiquidGlass(isRented ? 'rented' : 'default');
   
   const textColor = useColorModeValue(isRented ? 'yellow.800' : 'gray.600', 'gray.400');
@@ -86,10 +81,8 @@ const BookCard = ({ book, label }: BookCardProps) => {
 
   return (
     <Box 
-      bg={glass.bg} backdropFilter={glass.filter} 
-      boxShadow={glass.shadow} border={glass.border}
-      borderRadius="3xl" p={3} 
-      cursor="pointer" position="relative"
+      bg={glass.bg} backdropFilter={glass.filter} boxShadow={glass.shadow} border={glass.border}
+      borderRadius="3xl" p={{ base: 2, md: 3 }} cursor="pointer" position="relative"
       _hover={{ boxShadow: glass.hoverShadow, transform: 'translateY(-6px)' }} 
       transition="all 0.4s cubic-bezier(.08,.52,.52,1)" 
       onClick={() => navigate(`/book/${book.id}`)}
@@ -108,9 +101,8 @@ const BookCard = ({ book, label }: BookCardProps) => {
       </Skeleton>
       
       <Box px={2} pt={4} pb={2}>
-        {/* Rented Label inside the yellow glass for extra clarity */}
         {isRented && (
-          <Text fontSize="xs" fontWeight="bold" color={useColorModeValue('yellow.600', 'yellow.400')} textTransform="uppercase" letterSpacing="wider" mb={1}>
+          <Text fontSize="2xs" fontWeight="bold" color={useColorModeValue('yellow.600', 'yellow.400')} textTransform="uppercase" letterSpacing="wider" mb={1}>
             On Rent
           </Text>
         )}
@@ -118,18 +110,17 @@ const BookCard = ({ book, label }: BookCardProps) => {
         {label && !isRented && (
           <Badge 
             bgGradient="linear(to-r, purple.400, pink.400)" color="white" border="none"
-            mb={3} borderRadius="full" px={3} py={1} fontSize="2xs" fontWeight="bold"
-            boxShadow="0 2px 10px rgba(213, 63, 140, 0.4)"
-            display="block" w="fit-content"
+            mb={2} borderRadius="full" px={2} py={0.5} fontSize="2xs" fontWeight="bold"
+            boxShadow="0 2px 10px rgba(213, 63, 140, 0.4)" display="block" w="fit-content"
           >
             {label}
           </Badge>
         )}
         <Heading size="sm" noOfLines={1} mb={1} color={headingColor} letterSpacing="tight">{book.title}</Heading>
-        <Text fontSize="sm" color={textColor} noOfLines={1} mb={3} fontWeight="medium">{book.author || 'Unknown Author'}</Text>
+        <Text fontSize="xs" color={textColor} noOfLines={1} mb={2} fontWeight="medium">{book.author || 'Unknown Author'}</Text>
         
         {book.similarity > 0 && (
-          <Badge colorScheme={book.similarity > 0.8 ? 'green' : 'blue'} variant="subtle" fontSize="xs" borderRadius="md" bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')} backdropFilter="blur(4px)">
+          <Badge colorScheme={book.similarity > 0.8 ? 'green' : 'blue'} variant="subtle" fontSize="2xs" borderRadius="md" bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')} backdropFilter="blur(4px)">
             {(book.similarity * 100).toFixed(0)}% Match
           </Badge>
         )}
@@ -142,7 +133,7 @@ const BookCard = ({ book, label }: BookCardProps) => {
 export const Home = () => {
   const { user } = useAuth();
   const { searchBooks, getHistoryRecommendations, getWishlistRecommendations, getTrendingBooks } = useRecommendation();
-  const glass = useLiquidGlass('default'); // Default glass for the hero panel
+  const glass = useLiquidGlass('default'); 
   const toast = useToast();
   
   const [loading, setLoading] = useState(true);
@@ -150,9 +141,16 @@ export const Home = () => {
   const [query, setQuery] = useState('');
   
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [historyRecs, setHistoryRecs] = useState<any[]>([]);
-  const [wishlistRecs, setWishlistRecs] = useState<any[]>([]);
   const [trending, setTrending] = useState<any[]>([]);
+  
+  // DYNAMIC RECOMMENDATION STATES
+  const [interestRecs, setInterestRecs] = useState<any[]>([]);
+  
+  const [historyRecs, setHistoryRecs] = useState<any[]>([]);
+  const [historySourceTitle, setHistorySourceTitle] = useState<string | null>(null);
+  
+  const [wishlistRecs, setWishlistRecs] = useState<any[]>([]);
+  const [wishlistSourceTitle, setWishlistSourceTitle] = useState<string | null>(null);
 
   const orb1 = useColorModeValue("purple.300", "purple.900");
   const orb2 = useColorModeValue("blue.300", "blue.900");
@@ -163,17 +161,90 @@ export const Home = () => {
   useEffect(() => { loadInitialData(); }, [user]);
 
   const loadInitialData = async () => {
-    setLoading(true);
+    const cacheKeyTrending = 'read_sphere_trending';
+    const cacheKeyUser = user ? `read_sphere_user_${user.id}` : null;
+
+    let hasCache = false;
+
+    // --- 1. OPTIMISTIC UI LOAD (FAST CACHE) ---
+    try {
+      const cachedTrending = sessionStorage.getItem(cacheKeyTrending);
+      if (cachedTrending) {
+        setTrending(JSON.parse(cachedTrending));
+        hasCache = true;
+      }
+
+      if (cacheKeyUser) {
+        const cachedUser = sessionStorage.getItem(cacheKeyUser);
+        if (cachedUser) {
+          const parsedUser = JSON.parse(cachedUser);
+          setInterestRecs(parsedUser.interestRecs || []);
+          setHistoryRecs(parsedUser.historyRecs || []);
+          setHistorySourceTitle(parsedUser.historySourceTitle || null);
+          setWishlistRecs(parsedUser.wishlistRecs || []);
+          setWishlistSourceTitle(parsedUser.wishlistSourceTitle || null);
+          hasCache = true;
+        }
+      }
+    } catch (e) { console.warn("Cache reading error", e); }
+
+    // If cache exists, show UI immediately. Otherwise show skeletons.
+    if (hasCache) setLoading(false); 
+    else setLoading(true);
+
+    // --- 2. BACKGROUND FETCH & SILENT UPDATE ---
     try {
       const trendingData = await getTrendingBooks();
-      setTrending(trendingData || []);
-      if (user) {
-        const [history, wishlist] = await Promise.all([getHistoryRecommendations(), getWishlistRecommendations()]);
-        setHistoryRecs(history || []);
-        setWishlistRecs(wishlist || []);
+      const newTrendingString = JSON.stringify(trendingData || []);
+      
+      // Update state and cache if trending books changed
+      if (newTrendingString !== sessionStorage.getItem(cacheKeyTrending)) {
+        setTrending(trendingData || []);
+        sessionStorage.setItem(cacheKeyTrending, newTrendingString);
       }
-    } catch (err) { console.error(err); } 
-    finally { setLoading(false); }
+
+      if (user) {
+        const { data: profile } = await supabase.from('profiles').select('interests').eq('id', user.id).single();
+        
+        let interests = [];
+        if (profile && profile.interests) {
+          interests = await searchBooks(profile.interests);
+        }
+
+        const [historyData, wishlistData] = await Promise.all([
+          getHistoryRecommendations(), 
+          getWishlistRecommendations()
+        ]);
+
+        const freshUserData = {
+          interestRecs: interests || [],
+          historyRecs: historyData.recommendations || [],
+          historySourceTitle: historyData.sourceTitle,
+          wishlistRecs: wishlistData.recommendations || [],
+          wishlistSourceTitle: wishlistData.sourceTitle
+        };
+
+        const newUserString = JSON.stringify(freshUserData);
+
+        // Update state and cache if user personalized books changed
+        if (cacheKeyUser && newUserString !== sessionStorage.getItem(cacheKeyUser)) {
+          setInterestRecs(freshUserData.interestRecs);
+          setHistoryRecs(freshUserData.historyRecs);
+          setHistorySourceTitle(freshUserData.historySourceTitle);
+          setWishlistRecs(freshUserData.wishlistRecs);
+          setWishlistSourceTitle(freshUserData.wishlistSourceTitle);
+          sessionStorage.setItem(cacheKeyUser, newUserString);
+        }
+      } else {
+        setInterestRecs([]);
+        setHistoryRecs([]);
+        setWishlistRecs([]);
+      }
+    } catch (err) { 
+      console.error(err); 
+    } finally { 
+      if (!hasCache) setLoading(false); 
+    }
   };
 
   const handleSearch = async () => {
@@ -190,27 +261,21 @@ export const Home = () => {
   return (
     <Container maxW="container.xl" py={4} mb={20}>
       <Box position="relative" w="100%" borderRadius="3xl" mb={16} mt={4}>
-        
         <Box position="absolute" top="-10%" left="0%" w={{ base: "300px", md: "500px" }} h={{ base: "300px", md: "500px" }} bg={orb1} filter="blur(100px)" opacity={0.6} borderRadius="full" zIndex={0} />
         <Box position="absolute" bottom="-10%" right="10%" w={{ base: "250px", md: "400px" }} h={{ base: "250px", md: "400px" }} bg={orb2} filter="blur(90px)" opacity={0.5} borderRadius="full" zIndex={0} />
         <Box position="absolute" top="20%" right="-5%" w={{ base: "200px", md: "350px" }} h={{ base: "200px", md: "350px" }} bg={orb3} filter="blur(100px)" opacity={0.5} borderRadius="full" zIndex={0} />
 
         <VStack 
-          position="relative" zIndex={1}
-          bg={glass.bg} backdropFilter={glass.filter} 
+          position="relative" zIndex={1} bg={glass.bg} backdropFilter={glass.filter} 
           boxShadow={glass.shadow} border={glass.border}
           borderRadius="3xl" px={{ base: 6, md: 12 }} py={{ base: 16, md: 28 }}
           textAlign="center" spacing={8}
         >
-          <Badge 
-            colorScheme="blue" variant="subtle" px={4} py={1.5} borderRadius="full" 
-            backdropFilter="blur(10px)" bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')}
-            display="flex" alignItems="center" gap={2}
-          >
+          <Badge colorScheme="blue" variant="subtle" px={4} py={1.5} borderRadius="full" backdropFilter="blur(10px)" bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')} display="flex" alignItems="center" gap={2}>
             <Icon as={FaMagic} /> AI-Powered Library
           </Badge>
 
-          <Heading size="3xl" letterSpacing="tight" lineHeight="1.1" maxW="800px">
+          <Heading size={{ base: "2xl", md: "3xl" }} letterSpacing="tight" lineHeight="1.1" maxW="800px">
             Find your next story <br/>
             <Text as="span" bgGradient="linear(to-r, blue.500, purple.500, pink.500)" bgClip="text">
               as unique as you are.
@@ -225,8 +290,7 @@ export const Home = () => {
             w="100%" maxW="650px" gap={3} mt={4} direction={{ base: "column", md: "row" }}
             bg={useColorModeValue('rgba(255,255,255,0.6)', 'rgba(0,0,0,0.3)')} 
             backdropFilter="blur(12px)" border={glass.border} p={2} 
-            borderRadius={{ base: "2xl", md: "full" }}
-            boxShadow="inset 0 2px 4px rgba(0,0,0,0.05)"
+            borderRadius={{ base: "2xl", md: "full" }} boxShadow="inset 0 2px 4px rgba(0,0,0,0.05)"
           >
             <Input 
               bg="transparent" border="none" fontSize="lg" pl={{ base: 4, md: 6 }}
@@ -234,13 +298,10 @@ export const Home = () => {
               _placeholder={{ color: useColorModeValue('gray.500', 'gray.400') }}
               value={query} onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              _focus={{ ring: 0, outline: 'none' }}
-              h="54px"
+              _focus={{ ring: 0, outline: 'none' }} h="54px"
             />
             <Button 
-              colorScheme="blue" size="lg" px={10} h="54px"
-              w={{ base: "100%", md: "auto" }}
-              borderRadius={{ base: "xl", md: "full" }}
+              colorScheme="blue" size="lg" px={10} h="54px" w={{ base: "100%", md: "auto" }} borderRadius={{ base: "xl", md: "full" }}
               onClick={handleSearch} isLoading={searchLoading}
               bgGradient="linear(to-r, blue.400, purple.500)" border="none"
               _hover={{ transform: 'scale(1.02)', bgGradient: "linear(to-r, blue.500, purple.600)" }}
@@ -255,7 +316,7 @@ export const Home = () => {
       {loading && (
         <Box mb={12}>
           <Heading size="lg" mb={8}><Skeleton width="200px" height="30px" borderRadius="md" startColor="gray.100" endColor="gray.300" /></Heading>
-          <SimpleGrid columns={[1, 2, 3, 4, 5]} spacing={6}>
+          <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 3, md: 6 }}>
              {[...Array(5)].map((_, i) => <BookCardSkeleton key={i} />)}
           </SimpleGrid>
         </Box>
@@ -267,42 +328,67 @@ export const Home = () => {
           {searchResults.length > 0 && (
             <Box>
               <Heading size="xl" mb={8} letterSpacing="tight">Search Results</Heading>
-              <SimpleGrid columns={[1, 2, 3, 4, 5]} spacing={8}>
+              <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 3, md: 8 }}>
                 {searchResults.map((book) => <BookCard key={book.id} book={book} label="Result" />)}
               </SimpleGrid>
             </Box>
           )}
 
-          {historyRecs.length > 0 && (
+          {/* User Profile Interests */}
+          {user && interestRecs.length > 0 && (
             <Box>
               <Box mb={8}>
-                <Heading size="xl" letterSpacing="tight" mb={2}>Because you read similar books</Heading>
-                <Text color="gray.500" fontSize="md" fontWeight="medium">Curated from your rental history</Text>
+                <Heading size={{ base: "lg", md: "xl" }} letterSpacing="tight" mb={2}>Based on your interests</Heading>
+                <Text color="gray.500" fontSize={{ base: "sm", md: "md" }} fontWeight="medium">AI-curated picks for you</Text>
               </Box>
-              <SimpleGrid columns={[1, 2, 3, 4, 5]} spacing={8}>
+              <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 3, md: 8 }}>
+                {interestRecs.map((book) => <BookCard key={book.id} book={book} label="Recommended" />)}
+              </SimpleGrid>
+            </Box>
+          )}
+
+          {/* DYNAMIC: Based on most recent read */}
+          {user && historyRecs.length > 0 && (
+            <Box>
+              <Box mb={8}>
+                <Heading size={{ base: "lg", md: "xl" }} letterSpacing="tight" mb={2}>
+                  Because you read <Text as="span" color="blue.500">"{historySourceTitle}"</Text>
+                </Heading>
+                <Text color="gray.500" fontSize={{ base: "sm", md: "md" }} fontWeight="medium">Curated from your recent history</Text>
+              </Box>
+              <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 3, md: 8 }}>
                 {historyRecs.map((book) => <BookCard key={book.id} book={book} label="For You" />)}
               </SimpleGrid>
             </Box>
           )}
 
-          {wishlistRecs.length > 0 && (
+          {/* DYNAMIC: Based on most recent wishlist item */}
+          {user && wishlistRecs.length > 0 && (
             <Box>
               <Box mb={8}>
-                <Heading size="xl" letterSpacing="tight" mb={2}>Inspired by your Wishlist</Heading>
-                <Text color="gray.500" fontSize="md" fontWeight="medium">Matches for books you've saved</Text>
+                <Heading size={{ base: "lg", md: "xl" }} letterSpacing="tight" mb={2}>
+                  Inspired by <Text as="span" color="pink.500">"{wishlistSourceTitle}"</Text>
+                </Heading>
+                <Text color="gray.500" fontSize={{ base: "sm", md: "md" }} fontWeight="medium">Matches for books you've saved</Text>
               </Box>
-              <SimpleGrid columns={[1, 2, 3, 4, 5]} spacing={8}>
+              <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 3, md: 8 }}>
                 {wishlistRecs.map((book) => <BookCard key={book.id} book={book} label="Wishlist Match" />)}
               </SimpleGrid>
             </Box>
           )}
 
+          {/* Trending is always shown */}
           <Box>
-            <Heading size="xl" mb={8} letterSpacing="tight">Trending Now</Heading>
+            <HStack justify="space-between" mb={8} align="flex-end" flexWrap="wrap" gap={4}>
+              <Heading size={{ base: "lg", md: "xl" }} letterSpacing="tight">Trending Now</Heading>
+              <Button as={Link} to="/all-books" variant="ghost" colorScheme="blue" rightIcon={<Icon as={FaArrowRight} />} borderRadius="full" px={6}>
+                View All Books
+              </Button>
+            </HStack>
             {trending.length === 0 ? (
               <Text color="gray.500">No books found.</Text>
             ) : (
-              <SimpleGrid columns={[1, 2, 3, 4, 5]} spacing={8}>
+              <SimpleGrid columns={{ base: 2, sm: 3, md: 4, lg: 5 }} spacing={{ base: 3, md: 8 }}>
                 {trending.map((book) => <BookCard key={book.id} book={book} />)}
               </SimpleGrid>
             )}
@@ -310,7 +396,6 @@ export const Home = () => {
           
         </VStack>
       )}
-
     </Container>
   );
 };

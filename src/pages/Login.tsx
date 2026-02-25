@@ -27,12 +27,12 @@ export const Login = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mobile, setMobile] = useState(''); // NEW STATE
   
   const navigate = useNavigate();
   const toast = useToast();
   const glass = useLiquidGlass();
 
-  // Ambient Orbs
   const orb1 = useColorModeValue("purple.300", "purple.900");
   const orb2 = useColorModeValue("blue.300", "blue.900");
 
@@ -41,6 +41,10 @@ export const Login = () => {
   const inputFocusBg = useColorModeValue('white', 'gray.800');
 
   const handleAuth = async () => {
+    if (isSignUp && (!mobile || mobile.length < 10)) {
+      return toast({ title: 'Please enter a valid mobile number.', status: 'warning' });
+    }
+
     setLoading(true);
     try {
       if (isSignUp) {
@@ -48,11 +52,13 @@ export const Login = () => {
         if (error) throw error;
         
         if (data.user) {
+          // INSERT WITH MOBILE NUMBER
           await supabase.from('profiles').insert({
             id: data.user.id,
             email: data.user.email,
             full_name: email.split('@')[0], 
-            role: 'user'
+            role: 'user',
+            mobile_number: mobile 
           });
         }
 
@@ -74,15 +80,11 @@ export const Login = () => {
 
   return (
     <Box position="relative" w="100%" minH="100vh" display="flex" alignItems="center" justifyContent="center">
-      {/* Background Glowing Orbs */}
-      <Box position="absolute" top="10%" left="10%" w={{ base: "300px", md: "500px" }} h={{ base: "300px", md: "500px" }} bg={orb1} filter="blur(120px)" opacity={0.6} borderRadius="full" zIndex={0} pointerEvents="none" />
-      <Box position="absolute" bottom="10%" right="10%" w={{ base: "250px", md: "400px" }} h={{ base: "250px", md: "400px" }} bg={orb2} filter="blur(100px)" opacity={0.5} borderRadius="full" zIndex={0} pointerEvents="none" />
+      <Box position="fixed" top="10%" left="10%" w={{ base: "300px", md: "500px" }} h={{ base: "300px", md: "500px" }} bg={orb1} filter="blur(120px)" opacity={0.6} borderRadius="full" zIndex={0} pointerEvents="none" />
+      <Box position="fixed" bottom="10%" right="10%" w={{ base: "250px", md: "400px" }} h={{ base: "250px", md: "400px" }} bg={orb2} filter="blur(100px)" opacity={0.5} borderRadius="full" zIndex={0} pointerEvents="none" />
 
       <Container maxW="container.sm" py={20} position="relative" zIndex={1}>
-        <VStack 
-          spacing={8} p={{ base: 8, md: 12 }} 
-          bg={glass.bg} backdropFilter={glass.filter} borderRadius="3xl" shadow={glass.shadow} border={glass.border}
-        >
+        <VStack spacing={8} p={{ base: 8, md: 12 }} bg={glass.bg} backdropFilter={glass.filter} borderRadius="3xl" shadow={glass.shadow} border={glass.border}>
           <Heading size="xl" letterSpacing="tight" bgGradient="linear(to-r, blue.400, purple.500)" bgClip="text">
             {isSignUp ? 'Create an Account' : 'Welcome Back'}
           </Heading>
@@ -97,16 +99,28 @@ export const Login = () => {
               />
             </FormControl>
 
+            {/* NEW MOBILE INPUT (Only shows on Sign Up) */}
+            {isSignUp && (
+              <FormControl isRequired>
+                <FormLabel fontWeight="medium">Mobile Number</FormLabel>
+                <Input 
+                  type="tel" variant="filled" borderRadius="xl" size="lg" border="none"
+                  bg={inputBg} _hover={{ bg: inputHoverBg }} _focus={{ bg: inputFocusBg, ring: 2, ringColor: 'blue.400' }}
+                  value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="+91 9876543210"
+                />
+              </FormControl>
+            )}
+
             <FormControl isRequired>
-            <FormLabel fontWeight="medium">Password</FormLabel>
-            <Input 
-              type="password" variant="filled" borderRadius="xl" size="lg" border="none"
-              bg={inputBg} _hover={{ bg: inputHoverBg }} _focus={{ bg: inputFocusBg, ring: 2, ringColor: 'blue.400' }}
-              value={password} onChange={(e) => setPassword(e.target.value)} 
-              placeholder="••••••••"
-              onKeyDown={(e) => e.key === 'Enter' && handleAuth()} // <-- FIX: Press Enter to submit
-            />
-          </FormControl>
+              <FormLabel fontWeight="medium">Password</FormLabel>
+              <Input 
+                type="password" variant="filled" borderRadius="xl" size="lg" border="none"
+                bg={inputBg} _hover={{ bg: inputHoverBg }} _focus={{ bg: inputFocusBg, ring: 2, ringColor: 'blue.400' }}
+                value={password} onChange={(e) => setPassword(e.target.value)} 
+                placeholder="••••••••"
+                onKeyDown={(e) => e.key === 'Enter' && handleAuth()} 
+              />
+            </FormControl>
 
             <Button 
               w="100%" colorScheme="blue" borderRadius="full" size="lg" mt={4} color="white"

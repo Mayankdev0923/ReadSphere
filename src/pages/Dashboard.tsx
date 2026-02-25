@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { 
   Box, Container, Heading, Grid, VStack, HStack, Text, Badge, Button, 
   Image, useToast, SimpleGrid, useColorModeValue, AspectRatio, 
-  Spinner, Icon, Progress, Flex
+  Spinner, Icon, Progress, Flex, Modal, ModalOverlay, ModalContent, 
+  ModalHeader, ModalBody, ModalFooter, ModalCloseButton, Input, useDisclosure, Textarea 
 } from '@chakra-ui/react';
-import { DeleteIcon } from '@chakra-ui/icons';
+import { DeleteIcon, EditIcon } from '@chakra-ui/icons';
 import { FaBookOpen, FaClock, FaHeart, FaUpload, FaHistory, FaExchangeAlt } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -43,6 +44,12 @@ export const Dashboard = () => {
   const [wishlist, setWishlist] = useState<any[]>([]);
   const [myListings, setMyListings] = useState<any[]>([]);
 
+  // Profile Edit States
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [userInterests, setUserInterests] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+
   // Ambient Orbs
   const orb1 = useColorModeValue("blue.300", "blue.900");
   const orb2 = useColorModeValue("purple.300", "purple.900");
@@ -55,6 +62,13 @@ export const Dashboard = () => {
     if (!user) return;
     setLoading(true);
     try {
+      // Fetch Profile (Mobile & Interests)
+      const { data: profile } = await supabase.from('profiles').select('mobile_number, interests').eq('id', user.id).single();
+      if (profile) {
+        setMobileNumber(profile.mobile_number || '');
+        setUserInterests(profile.interests || '');
+      }
+
       const { data: rentalData } = await supabase.from('transactions').select('*, book:books(*)').eq('user_id', user.id).order('created_at', { ascending: false });
       if (rentalData) setRentals(rentalData);
 
@@ -88,6 +102,42 @@ export const Dashboard = () => {
     }
   };
 
+  const handleExtendRequest = async (transactionId: number) => {
+    const { error } = await supabase
+      .from('transactions')
+      .update({ extension_requested: true })
+      .eq('id', transactionId);
+
+    if (!error) {
+      toast({ 
+        title: 'Extension Requested', 
+        description: 'Waiting for admin approval to extend your due date.', 
+        status: 'info' 
+      });
+      fetchData();
+    } else {
+      toast({ title: 'Request Failed', description: error.message, status: 'error' });
+    }
+  };
+
+  const handleCancelExtensionRequest = async (transactionId: number) => {
+    const { error } = await supabase
+      .from('transactions')
+      .update({ extension_requested: false })
+      .eq('id', transactionId);
+
+    if (!error) {
+      toast({ 
+        title: 'Extension Cancelled', 
+        description: 'Your request to extend the rent period was cancelled.', 
+        status: 'info' 
+      });
+      fetchData();
+    } else {
+      toast({ title: 'Action Failed', description: error.message, status: 'error' });
+    }
+  };
+
   const handleCancelRequest = async (transactionId: number) => {
     if (!window.confirm("Cancel this request?")) return;
     const { error } = await supabase.from('transactions').delete().eq('id', transactionId);
@@ -98,6 +148,26 @@ export const Dashboard = () => {
     if (!window.confirm("Remove this book permanently?")) return;
     const { error } = await supabase.from('books').delete().eq('id', bookId);
     if (!error) { toast({ title: 'Listing Removed', status: 'success' }); fetchData(); }
+  };
+
+  const handleSaveProfile = async () => {
+    if (mobileNumber.length > 0 && mobileNumber.length < 10) return toast({ title: 'Invalid mobile number', status: 'warning' });
+    setSavingProfile(true);
+    
+    // Save both mobile and interests to DB
+    const { error } = await supabase.from('profiles').update({ 
+      mobile_number: mobileNumber,
+      interests: userInterests 
+    }).eq('id', user?.id);
+    
+    setSavingProfile(false);
+    
+    if (!error) {
+      toast({ title: 'Profile Updated', status: 'success' });
+      onClose();
+    } else {
+      toast({ title: 'Update Failed', description: error.message, status: 'error' });
+    }
   };
 
   const activeRentals = rentals.filter(r => ['approved', 'active', 'pending_return'].includes(r.status));
@@ -122,13 +192,56 @@ export const Dashboard = () => {
       <Box position="fixed" top="40%" right="-5%" w="400px" h="400px" bg={orb2} filter="blur(100px)" opacity={0.3} borderRadius="full" zIndex={0} pointerEvents="none" />
 
       <Container maxW="container.xl" py={12} position="relative" zIndex={1}>
-        {/* --- HEADER --- */}
-        <VStack align="start" mb={10} spacing={1}>
-          <Heading size="2xl" letterSpacing="tight" bgGradient="linear(to-r, blue.400, purple.500)" bgClip="text">
-            Command Center
-          </Heading>
-          <Text color={textColor} fontSize="lg">Welcome back, {user?.email}</Text>
-        </VStack>
+        
+        {/* --- HEADER WITH EDIT BUTTON --- */}
+        <HStack justify="space-between" align="flex-end" mb={10} w="100%" flexWrap="wrap" gap={4}>
+          <VStack align="start" spacing={1}>
+            <Heading size="2xl" letterSpacing="tight" bgGradient="linear(to-r, blue.400, purple.500)" bgClip="text">
+              Command Center
+            </Heading>
+            <Text color={textColor} fontSize="lg">Welcome back, {user?.email}</Text>
+          </VStack>
+          <Button leftIcon={<EditIcon />} colorScheme="blue" variant="outline" borderRadius="full" onClick={onOpen} bg={glass.bg} backdropFilter={glass.filter} shadow="sm">
+            Edit Profile
+          </Button>
+        </HStack>
+
+        {/* --- PROFILE EDIT MODAL --- */}
+        <Modal isOpen={isOpen} onClose={onClose} isCentered>
+          <ModalOverlay backdropFilter="blur(8px)" bg="blackAlpha.400" />
+          <ModalContent bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} borderRadius="2xl" shadow="2xl">
+            <ModalHeader>Profile Settings</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody pb={6}>
+              <Text fontWeight="medium" mb={2} color={textColor}>Mobile Number</Text>
+              <Input 
+                value={mobileNumber} 
+                onChange={(e) => setMobileNumber(e.target.value)} 
+                placeholder="e.g. +91 9876543210" 
+                variant="filled" borderRadius="xl" size="lg" border="none" mb={4}
+                bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')}
+                _focus={{ bg: useColorModeValue('white', 'gray.800'), ring: 2, ringColor: 'blue.400' }}
+              />
+              
+              <Text fontWeight="medium" mb={2} color={textColor}>Your Favorite Genres / Interests</Text>
+              <Textarea 
+                value={userInterests} 
+                onChange={(e) => setUserInterests(e.target.value)} 
+                placeholder="e.g. Cyberpunk, history, lighthearted romances..." 
+                variant="filled" borderRadius="xl" border="none" rows={3}
+                bg={useColorModeValue('whiteAlpha.600', 'blackAlpha.300')}
+                _focus={{ bg: useColorModeValue('white', 'gray.800'), ring: 2, ringColor: 'blue.400' }}
+              />
+              <Text fontSize="xs" color="gray.500" mt={2}>We use this to power your AI recommendations on the Home page.</Text>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="ghost" mr={3} onClick={onClose} borderRadius="full">Cancel</Button>
+              <Button colorScheme="blue" borderRadius="full" isLoading={savingProfile} onClick={handleSaveProfile} bgGradient="linear(to-r, blue.400, purple.500)" _hover={{ transform: 'scale(1.02)' }}>
+                Save Changes
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
 
         {/* --- 1. METRICS GRID --- */}
         <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4} mb={12}>
@@ -165,13 +278,14 @@ export const Dashboard = () => {
               {activeRentals.length === 0 ? (
                 <Flex bg={glass.bg} backdropFilter={glass.filter} border={glass.border} borderRadius="3xl" p={10} justify="center" align="center" direction="column" shadow={glass.shadow}>
                   <Text color={textColor} mb={4} fontWeight="medium">Your reading list is empty.</Text>
-                  <Button borderRadius="full" colorScheme="blue" as={Link} to="/">Browse Books</Button>
+                  <Button borderRadius="full" colorScheme="green" as={Link} to="/all-books">Browse Books</Button>
                 </Flex>
               ) : (
                 <SimpleGrid columns={[1, 1, 2]} spacing={6}>
                   {activeRentals.map((r) => {
                     const { percent, daysLeft } = calculateProgress(r.due_date, r.approval_date);
                     const isPendingReturn = r.status === 'pending_return';
+                    const isExtensionRequested = r.extension_requested;
 
                     return (
                       <VStack key={r.id} p={5} borderRadius="3xl" bg={glass.solidBg} backdropFilter={glass.filter} border={glass.border} shadow={glass.shadow} align="stretch" spacing={4} transition="all 0.3s" _hover={{ shadow: glass.hoverShadow, transform: 'translateY(-4px)' }}>
@@ -194,16 +308,33 @@ export const Dashboard = () => {
                             </Box>
                           </VStack>
                         </HStack>
-                        <Button 
-                          w="100%" size="sm" borderRadius="full" 
-                          colorScheme={isPendingReturn ? "orange" : "blue"} 
-                          variant={isPendingReturn ? "subtle" : "outline"}
-                          onClick={() => !isPendingReturn && handleReturnRequest(r.id)}
-                          isDisabled={isPendingReturn}
-                          leftIcon={isPendingReturn ? <Icon as={FaClock} /> : <Icon as={FaExchangeAlt} />}
-                        >
-                          {isPendingReturn ? "Verification Pending" : "Return Book"}
-                        </Button>
+                        
+                        {/* UPDATED: Action Buttons Container */}
+                        <HStack w="100%" spacing={3}>
+                          <Button 
+                            flex={1} size="sm" borderRadius="full" 
+                            colorScheme={isPendingReturn ? "orange" : "blue"} 
+                            variant={isPendingReturn ? "subtle" : "outline"}
+                            onClick={() => !isPendingReturn && handleReturnRequest(r.id)}
+                            isDisabled={isPendingReturn}
+                            leftIcon={isPendingReturn ? <Icon as={FaClock} /> : <Icon as={FaExchangeAlt} />}
+                          >
+                            {isPendingReturn ? "Verification Pending" : "Return Book"}
+                          </Button>
+
+                          {/* NEW: Extend Rent / Cancel Extension Toggle */}
+                          {!isPendingReturn && (
+                            <Button 
+                              flex={1} size="sm" borderRadius="full" 
+                              colorScheme={isExtensionRequested ? "red" : "purple"} 
+                              variant={isExtensionRequested ? "subtle" : "outline"}
+                              onClick={() => isExtensionRequested ? handleCancelExtensionRequest(r.id) : handleExtendRequest(r.id)}
+                            >
+                              {isExtensionRequested ? "Cancel Extension" : "Extend Rent"}
+                            </Button>
+                          )}
+                        </HStack>
+                        
                       </VStack>
                     );
                   })}
